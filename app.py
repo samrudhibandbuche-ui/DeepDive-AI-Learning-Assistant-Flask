@@ -18,6 +18,7 @@ import subprocess
 import whisper
 import threading
 import yt_dlp
+import os
 
 
 # =========================================================
@@ -1079,20 +1080,10 @@ def file_too_large(error):
 # =========================================================
 # RUN SERVER
 # =========================================================
-
 if __name__ == "__main__":
-
-    print()
-    print("=" * 60)
-    print("DeepDive AI")
-    print("Flask development server")
-    print("=" * 60)
-    print("Open: http://127.0.0.1:5000")
-    print("=" * 60)
-    print()
-
+    port = int(os.environ.get("PORT", 5000))
     app.run(
         debug=True,
         host="0.0.0.0",
-        port=5000
+        port=port
     )
