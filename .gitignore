@@ -1,0 +1,26 @@
+# Environment variables
+.env
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+env/
+
+# Uploaded videos
+uploads/*
+!uploads/.gitkeep
+
+# Generated files
+outputs/*
+!outputs/.gitkeep
+
+# Temporary files
+*.tmp
+*.temp
+*.log
+
+# OS files
+.DS_Store
+Thumbs.db
