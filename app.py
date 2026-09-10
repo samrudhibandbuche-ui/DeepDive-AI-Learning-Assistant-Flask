@@ -2,7 +2,6 @@ from reportlab.lib.pagesizes import A4
 from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, PageBreak
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib.enums import TA_CENTER
-from reportlab.lib import colors
 from reportlab.lib.units import inch
 
 from ai_service import (
@@ -15,16 +14,20 @@ from flask import Flask, render_template, request, jsonify
 from pathlib import Path
 import uuid
 import subprocess
-import whisper
 import threading
 import yt_dlp
 import os
+import assemblyai as aai
+from dotenv import load_dotenv
 
-whisper_model = None
-import torch
 
-torch.set_num_threads(1)
-torch.set_num_interop_threads(1)
+# =========================================================
+# ENVIRONMENT
+# =========================================================
+
+load_dotenv()
+
+aai.settings.api_key = os.getenv("ASSEMBLYAI_API_KEY")
 
 
 # =========================================================
@@ -42,11 +45,6 @@ UPLOAD_FOLDER.mkdir(exist_ok=True)
 OUTPUT_FOLDER.mkdir(exist_ok=True)
 
 app.config["MAX_CONTENT_LENGTH"] = 500 * 1024 * 1024
-
-
-# =========================================================
-# WHISPER MODEL
-# =========================================================
 
 
 # =========================================================
@@ -79,10 +77,6 @@ def workspace():
 # =========================================================
 
 def create_processing_job(video_id, original_name, saved_path):
-    """
-    Creates a job and starts the existing processing pipeline.
-    Used by both normal uploads and YouTube downloads.
-    """
 
     jobs[video_id] = {
         "status": "uploaded",
@@ -145,7 +139,6 @@ def upload_video():
             "message": "Unsupported video format."
         }), 400
 
-    # Create unique ID
     video_id = str(uuid.uuid4())
 
     saved_filename = f"{video_id}{extension}"
@@ -192,6 +185,7 @@ def upload_video():
 
 @app.route("/youtube", methods=["POST"])
 def youtube():
+
     data = request.get_json()
 
     if not data or not data.get("url"):
@@ -202,7 +196,6 @@ def youtube():
 
     url = data["url"].strip()
 
-    # Basic YouTube URL check
     if not (
         "youtube.com/watch" in url
         or "youtu.be/" in url
@@ -229,38 +222,51 @@ def youtube():
     }
 
     try:
+
         print("\n==============================")
         print("YouTube download started")
         print("URL:", url)
         print("==============================\n")
 
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            info = ydl.extract_info(url, download=True)
+            info = ydl.extract_info(
+                url,
+                download=True
+            )
 
-        title = info.get("title", "YouTube Lecture")
+        title = info.get(
+            "title",
+            "YouTube Lecture"
+        )
 
-        # Find the downloaded file
         downloaded_file = None
 
-        for file in UPLOAD_FOLDER.glob(f"{video_id}.*"):
+        for file in UPLOAD_FOLDER.glob(
+            f"{video_id}.*"
+        ):
+
             if file.suffix.lower() in [
                 ".mp4",
                 ".webm",
                 ".mkv",
                 ".mov"
             ]:
+
                 downloaded_file = file
                 break
 
         if downloaded_file is None:
+
             raise Exception(
                 "YouTube download completed, but the video file "
                 "could not be found."
             )
 
-        print("Downloaded:", downloaded_file)
+        print(
+            "Downloaded:",
+            downloaded_file
+        )
 
-        # Create processing job
         jobs[video_id] = {
             "status": "processing",
             "progress": 0,
@@ -275,7 +281,6 @@ def youtube():
             "error": None
         }
 
-        # Start normal processing pipeline
         thread = threading.Thread(
             target=process_video,
             args=(video_id,),
@@ -290,25 +295,28 @@ def youtube():
             "filename": title
         })
 
-    except Exception as e:
+    except Exception as error:
 
         print("\n==============================")
         print("YOUTUBE ERROR")
-        print(str(e))
+        print(str(error))
         print("==============================\n")
 
-        # Remove partially downloaded files
-        for file in UPLOAD_FOLDER.glob(f"{video_id}.*"):
+        for file in UPLOAD_FOLDER.glob(
+            f"{video_id}.*"
+        ):
+
             try:
                 file.unlink()
-            except:
+            except Exception:
                 pass
 
         return jsonify({
             "success": False,
             "error": "Could not download this YouTube video.",
-            "details": str(e)
+            "details": str(error)
         }), 500
+
 
 # =========================================================
 # PROCESS VIDEO
@@ -316,14 +324,14 @@ def youtube():
 
 def process_video(video_id):
 
-    global whisper_model
-
     job = jobs.get(video_id)
 
     if not job:
         return
 
-    video_path = Path(job["video_path"])
+    video_path = Path(
+        job["video_path"]
+    )
 
     try:
 
@@ -333,14 +341,19 @@ def process_video(video_id):
 
         job["status"] = "processing"
         job["progress"] = 20
-        job["message"] = "Extracting audio from lecture..."
+        job["message"] = (
+            "Extracting audio from lecture..."
+        )
 
         print()
         print("=" * 60)
         print("STEP 1: AUDIO EXTRACTION")
         print("=" * 60)
 
-        audio_path = OUTPUT_FOLDER / f"{video_id}.wav"
+        audio_path = (
+            OUTPUT_FOLDER /
+            f"{video_id}.wav"
+        )
 
         command = [
             "ffmpeg",
@@ -373,99 +386,162 @@ def process_video(video_id):
                 "Audio extraction failed."
             )
 
-        job["audio_path"] = str(audio_path)
+        job["audio_path"] = str(
+            audio_path
+        )
 
-        print("Audio extracted successfully.")
+        print(
+            "Audio extracted successfully."
+        )
+
         print(audio_path)
 
         # =================================================
-        # STEP 2 — WHISPER TRANSCRIPTION
+        # STEP 2 — ASSEMBLYAI TRANSCRIPTION
         # =================================================
 
-        if whisper_model is None:
-           print("Loading Whisper model...")
-           whisper_model = whisper.load_model("tiny", device="cpu")
-           print("Whisper model loaded successfully.")
-
         job["progress"] = 45
-        job["message"] = "Transcribing lecture with Whisper..."
+        job["message"] = (
+            "Transcribing lecture with AI..."
+        )
 
         print()
         print("=" * 60)
-        print("STEP 2: WHISPER TRANSCRIPTION")
+        print("STEP 2: AI TRANSCRIPTION")
         print("=" * 60)
 
-        result = whisper_model.transcribe(
-            str(audio_path),
-            fp16=False
-        )
-
-        transcript = result["text"].strip()
-
-        if not transcript:
+        if not os.getenv(
+            "ASSEMBLYAI_API_KEY"
+        ):
 
             raise RuntimeError(
-                "Whisper could not detect any speech in the video."
+                "AssemblyAI API key is not configured."
             )
 
-        job["transcript"] = transcript
+        try:
 
-        print("Transcription completed.")
-        print("Characters:", len(transcript))
+            transcriber = aai.Transcriber()
+
+            transcript_result = (
+                transcriber.transcribe(
+                    str(audio_path)
+                )
+            )
+
+            if (
+                transcript_result.status
+                == aai.TranscriptStatus.error
+            ):
+
+                raise RuntimeError(
+                    f"Transcription failed: "
+                    f"{transcript_result.error}"
+                )
+
+            transcript = (
+                transcript_result.text or ""
+            ).strip()
+
+            if not transcript:
+
+                raise RuntimeError(
+                    "No speech was detected in the lecture."
+                )
+
+            job["transcript"] = transcript
+
+            print(
+                "Transcription completed successfully."
+            )
+
+            print(
+                "Characters:",
+                len(transcript)
+            )
+
+        except Exception as error:
+
+            print(
+                "TRANSCRIPTION ERROR:"
+            )
+
+            print(error)
+
+            raise RuntimeError(
+                f"Transcription failed: {error}"
+            )
 
         # =================================================
         # STEP 3 — AI SMART NOTES
         # =================================================
 
         job["progress"] = 70
-        job["message"] = "Generating smart notes with AI..."
+        job["message"] = (
+            "Generating smart notes with AI..."
+        )
 
         print()
         print("=" * 60)
         print("STEP 3: AI SMART NOTES")
         print("=" * 60)
 
-        notes = generate_smart_notes(transcript)
+        notes = generate_smart_notes(
+            transcript
+        )
 
         job["notes"] = notes
 
-        print("Smart notes generated successfully.")
+        print(
+            "Smart notes generated successfully."
+        )
 
         # =================================================
         # STEP 4 — AI QUIZ
         # =================================================
 
         job["progress"] = 85
-        job["message"] = "Creating quiz from your lecture..."
+        job["message"] = (
+            "Creating quiz from your lecture..."
+        )
 
         print()
         print("=" * 60)
         print("STEP 4: AI QUIZ")
         print("=" * 60)
 
-        quiz = generate_quiz(transcript)
+        quiz = generate_quiz(
+            transcript
+        )
 
         job["quiz"] = quiz
 
-        print("Quiz generated successfully.")
+        print(
+            "Quiz generated successfully."
+        )
 
         # =================================================
         # STEP 5 — AI FLASHCARDS
         # =================================================
 
         job["progress"] = 92
-        job["message"] = "Creating flashcards from your lecture..."
+        job["message"] = (
+            "Creating flashcards from your lecture..."
+        )
 
         print()
         print("=" * 60)
         print("STEP 5: AI FLASHCARDS")
         print("=" * 60)
 
-        flashcards = generate_flashcards(transcript)
+        flashcards = generate_flashcards(
+            transcript
+        )
 
         job["flashcards"] = flashcards
 
-        print("Flashcards generated successfully.")
+        print(
+            "Flashcards generated successfully."
+        )
 
         # =================================================
         # COMPLETE
@@ -473,7 +549,9 @@ def process_video(video_id):
 
         job["progress"] = 100
         job["status"] = "completed"
-        job["message"] = "Lecture processing completed."
+        job["message"] = (
+            "Lecture processing completed."
+        )
 
         print()
         print("=" * 60)
@@ -486,13 +564,16 @@ def process_video(video_id):
         print("=" * 60)
         print("PROCESSING ERROR")
         print("=" * 60)
+
         print(error)
+
         print("=" * 60)
 
         job["status"] = "error"
         job["progress"] = 0
         job["message"] = str(error)
         job["error"] = str(error)
+
 
 # =========================================================
 # JOB STATUS
@@ -573,10 +654,14 @@ def generate_pdf(video_id):
 
         return jsonify({
             "success": False,
-            "message": "Please wait until lecture processing is complete."
+            "message": (
+                "Please wait until lecture processing "
+                "is complete."
+            )
         }), 400
 
-    pdf_path = OUTPUT_FOLDER / (
+    pdf_path = (
+        OUTPUT_FOLDER /
         f"DeepDive_Learning_Pack_{video_id}.pdf"
     )
 
@@ -657,7 +742,9 @@ def generate_pdf(video_id):
 
                                 story.append(
                                     Paragraph(
-                                        f"<b>{safe_text(key.replace('_', ' ').title())}:</b> "
+                                        f"<b>"
+                                        f"{safe_text(key.replace('_', ' ').title())}"
+                                        f":</b> "
                                         f"{safe_text(val)}",
                                         normal_style
                                     )
@@ -683,7 +770,9 @@ def generate_pdf(video_id):
 
                         story.append(
                             Paragraph(
-                                f"<b>{safe_text(key.replace('_', ' ').title())}</b>",
+                                f"<b>"
+                                f"{safe_text(key.replace('_', ' ').title())}"
+                                f"</b>",
                                 normal_style
                             )
                         )
@@ -694,7 +783,9 @@ def generate_pdf(video_id):
 
                         story.append(
                             Paragraph(
-                                f"<b>{safe_text(key.replace('_', ' ').title())}:</b> "
+                                f"<b>"
+                                f"{safe_text(key.replace('_', ' ').title())}"
+                                f":</b> "
                                 f"{safe_text(val)}",
                                 normal_style
                             )
@@ -720,9 +811,9 @@ def generate_pdf(video_id):
 
         story = []
 
-        # -----------------------------------------------------
+        # =================================================
         # COVER
-        # -----------------------------------------------------
+        # =================================================
 
         story.append(
             Spacer(1, 50)
@@ -761,9 +852,9 @@ def generate_pdf(video_id):
             )
         )
 
-        # -----------------------------------------------------
+        # =================================================
         # SMART NOTES
-        # -----------------------------------------------------
+        # =================================================
 
         story.append(PageBreak())
 
@@ -789,9 +880,9 @@ def generate_pdf(video_id):
                 )
             )
 
-        # -----------------------------------------------------
+        # =================================================
         # QUIZ
-        # -----------------------------------------------------
+        # =================================================
 
         story.append(PageBreak())
 
@@ -804,14 +895,20 @@ def generate_pdf(video_id):
 
         quiz = job.get("quiz")
 
-        if isinstance(quiz, list) and quiz:
+        if isinstance(
+            quiz,
+            list
+        ) and quiz:
 
             for i, question in enumerate(
                 quiz,
                 start=1
             ):
 
-                if isinstance(question, dict):
+                if isinstance(
+                    question,
+                    dict
+                ):
 
                     q_text = (
                         question.get("question")
@@ -821,7 +918,8 @@ def generate_pdf(video_id):
 
                     story.append(
                         Paragraph(
-                            f"<b>{i}. {safe_text(q_text)}</b>",
+                            f"<b>{i}. "
+                            f"{safe_text(q_text)}</b>",
                             normal_style
                         )
                     )
@@ -840,7 +938,8 @@ def generate_pdf(video_id):
 
                             story.append(
                                 Paragraph(
-                                    f"• {safe_text(option)}",
+                                    f"• "
+                                    f"{safe_text(option)}",
                                     normal_style
                                 )
                             )
@@ -861,8 +960,10 @@ def generate_pdf(video_id):
                             )
                         )
 
-                    explanation = question.get(
-                        "explanation"
+                    explanation = (
+                        question.get(
+                            "explanation"
+                        )
                     )
 
                     if explanation:
@@ -898,9 +999,9 @@ def generate_pdf(video_id):
                 )
             )
 
-        # -----------------------------------------------------
+        # =================================================
         # FLASHCARDS
-        # -----------------------------------------------------
+        # =================================================
 
         story.append(PageBreak())
 
@@ -911,19 +1012,27 @@ def generate_pdf(video_id):
             )
         )
 
-        flashcards = job.get("flashcards")
+        flashcards = job.get(
+            "flashcards"
+        )
 
-        if isinstance(
-            flashcards,
-            list
-        ) and flashcards:
+        if (
+            isinstance(
+                flashcards,
+                list
+            )
+            and flashcards
+        ):
 
             for i, card in enumerate(
                 flashcards,
                 start=1
             ):
 
-                if isinstance(card, dict):
+                if isinstance(
+                    card,
+                    dict
+                ):
 
                     front = (
                         card.get("front")
@@ -982,9 +1091,9 @@ def generate_pdf(video_id):
                 )
             )
 
-        # -----------------------------------------------------
+        # =================================================
         # TRANSCRIPT
-        # -----------------------------------------------------
+        # =================================================
 
         story.append(PageBreak())
 
@@ -1042,7 +1151,8 @@ def generate_pdf(video_id):
 @app.route("/download-pdf/<video_id>")
 def download_pdf(video_id):
 
-    pdf_path = OUTPUT_FOLDER / (
+    pdf_path = (
+        OUTPUT_FOLDER /
         f"DeepDive_Learning_Pack_{video_id}.pdf"
     )
 
@@ -1072,15 +1182,26 @@ def file_too_large(error):
 
     return jsonify({
         "success": False,
-        "message": "Video is too large. Maximum size is 500 MB."
+        "message": (
+            "Video is too large. "
+            "Maximum size is 500 MB."
+        )
     }), 413
 
 
 # =========================================================
 # RUN SERVER
 # =========================================================
+
 if __name__ == "__main__":
-    port = int(os.environ.get("PORT", 5000))
+
+    port = int(
+        os.environ.get(
+            "PORT",
+            5000
+        )
+    )
+
     app.run(
         debug=True,
         host="0.0.0.0",
