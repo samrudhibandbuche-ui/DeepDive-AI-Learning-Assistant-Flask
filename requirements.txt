@@ -4,3 +4,4 @@ torch
 yt-dlp
 reportlab
 google-genai
+gunicorn
