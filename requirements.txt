@@ -1,4 +1,6 @@
-
 Flask
 openai-whisper
 torch
+yt-dlp
+reportlab
+google-genai
