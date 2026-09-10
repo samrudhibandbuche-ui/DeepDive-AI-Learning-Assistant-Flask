@@ -20,6 +20,8 @@ import threading
 import yt_dlp
 import os
 
+whisper_model = None
+
 
 # =========================================================
 # FLASK SETUP
@@ -41,13 +43,6 @@ app.config["MAX_CONTENT_LENGTH"] = 500 * 1024 * 1024
 # =========================================================
 # WHISPER MODEL
 # =========================================================
-
-print("Loading Whisper model...")
-
-# tiny = fastest and easiest for local testing
-whisper_model = whisper.load_model("tiny")
-
-print("Whisper model loaded successfully.")
 
 
 # =========================================================
@@ -317,6 +312,8 @@ def youtube():
 
 def process_video(video_id):
 
+    global whisper_model
+
     job = jobs.get(video_id)
 
     if not job:
@@ -377,10 +374,18 @@ def process_video(video_id):
         print("Audio extracted successfully.")
         print(audio_path)
 
-
         # =================================================
         # STEP 2 — WHISPER TRANSCRIPTION
         # =================================================
+
+        if whisper_model is None:
+
+            print()
+            print("Loading Whisper model...")
+
+            whisper_model = whisper.load_model("tiny")
+
+            print("Whisper model loaded successfully.")
 
         job["progress"] = 45
         job["message"] = "Transcribing lecture with Whisper..."
@@ -408,7 +413,6 @@ def process_video(video_id):
         print("Transcription completed.")
         print("Characters:", len(transcript))
 
-
         # =================================================
         # STEP 3 — AI SMART NOTES
         # =================================================
@@ -426,7 +430,6 @@ def process_video(video_id):
         job["notes"] = notes
 
         print("Smart notes generated successfully.")
-
 
         # =================================================
         # STEP 4 — AI QUIZ
@@ -446,7 +449,6 @@ def process_video(video_id):
 
         print("Quiz generated successfully.")
 
-
         # =================================================
         # STEP 5 — AI FLASHCARDS
         # =================================================
@@ -465,7 +467,6 @@ def process_video(video_id):
 
         print("Flashcards generated successfully.")
 
-
         # =================================================
         # COMPLETE
         # =================================================
@@ -478,7 +479,6 @@ def process_video(video_id):
         print("=" * 60)
         print("PROCESSING COMPLETE")
         print("=" * 60)
-
 
     except Exception as error:
 
@@ -493,7 +493,6 @@ def process_video(video_id):
         job["progress"] = 0
         job["message"] = str(error)
         job["error"] = str(error)
-
 
 # =========================================================
 # JOB STATUS
