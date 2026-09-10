@@ -21,6 +21,10 @@ import yt_dlp
 import os
 
 whisper_model = None
+import torch
+
+torch.set_num_threads(1)
+torch.set_num_interop_threads(1)
 
 
 # =========================================================
@@ -379,13 +383,9 @@ def process_video(video_id):
         # =================================================
 
         if whisper_model is None:
-
-            print()
-            print("Loading Whisper model...")
-
-            whisper_model = whisper.load_model("tiny")
-
-            print("Whisper model loaded successfully.")
+           print("Loading Whisper model...")
+           whisper_model = whisper.load_model("tiny", device="cpu")
+           print("Whisper model loaded successfully.")
 
         job["progress"] = 45
         job["message"] = "Transcribing lecture with Whisper..."
