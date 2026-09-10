@@ -1,8 +1,12 @@
 services:
   - type: web
-    name: deepdive-ai-learning-assistant
-    runtime: python
-    buildCommand: |
-      apt-get update && apt-get install -y ffmpeg
-      pip install -r requirements.txt
-    startCommand: gunicorn app:app
+    name: deepdive-ai-learning-assistant-flask
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    plan: free
+    envVars:
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: PYTHON_VERSION
+        value: 3.11.9
