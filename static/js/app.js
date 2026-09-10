@@ -3,7 +3,6 @@
 // FRONTEND JAVASCRIPT
 // ==================================================
 
-
 let selectedVideo = null;
 
 
@@ -33,53 +32,66 @@ function closeWorkspace() {
 }
 
 
-// Close modal when clicking outside it
+// Close modal when clicking outside
 
-const modal = document.getElementById("workspaceModal");
+document.addEventListener("DOMContentLoaded", function () {
 
-if (modal) {
+    const modal = document.getElementById("workspaceModal");
 
-    modal.addEventListener("click", function(event) {
+    if (modal) {
 
-        if (event.target === modal) {
-            closeWorkspace();
-        }
+        modal.addEventListener("click", function (event) {
 
-    });
+            if (event.target === modal) {
+                closeWorkspace();
+            }
 
-}
+        });
+
+    }
+
+});
 
 
 // ==================================================
 // VIDEO INPUT
 // ==================================================
 
-const videoInput = document.getElementById("videoInput");
+document.addEventListener("DOMContentLoaded", function () {
 
-if (videoInput) {
+    const videoInput = document.getElementById("videoInput");
 
-    videoInput.addEventListener("change", function() {
+    if (videoInput) {
 
-        if (this.files.length > 0) {
+        videoInput.addEventListener("change", function () {
 
-            handleVideo(this.files[0]);
+            if (this.files.length > 0) {
 
-        }
+                handleVideo(this.files[0]);
 
-    });
+            }
 
-}
+        });
+
+    }
+
+});
 
 
 // ==================================================
 // DRAG AND DROP
 // ==================================================
 
-const uploadBox = document.getElementById("uploadBox");
+document.addEventListener("DOMContentLoaded", function () {
 
-if (uploadBox) {
+    const uploadBox = document.getElementById("uploadBox");
 
-    uploadBox.addEventListener("dragover", function(event) {
+    if (!uploadBox) {
+        return;
+    }
+
+
+    uploadBox.addEventListener("dragover", function (event) {
 
         event.preventDefault();
 
@@ -88,14 +100,14 @@ if (uploadBox) {
     });
 
 
-    uploadBox.addEventListener("dragleave", function() {
+    uploadBox.addEventListener("dragleave", function () {
 
         uploadBox.classList.remove("dragging");
 
     });
 
 
-    uploadBox.addEventListener("drop", function(event) {
+    uploadBox.addEventListener("drop", function (event) {
 
         event.preventDefault();
 
@@ -111,7 +123,7 @@ if (uploadBox) {
 
     });
 
-}
+});
 
 
 // ==================================================
@@ -169,7 +181,6 @@ function handleVideo(file) {
 
     selectedVideo = file;
 
-
     displaySelectedFile(file);
 
 }
@@ -199,15 +210,19 @@ function displaySelectedFile(file) {
     }
 
 
-    fileName.textContent = file.name;
+    if (fileName) {
+        fileName.textContent = file.name;
+    }
 
 
     const sizeMB =
         (file.size / (1024 * 1024)).toFixed(1);
 
 
-    fileSize.textContent =
-        `${sizeMB} MB`;
+    if (fileSize) {
+        fileSize.textContent =
+            `${sizeMB} MB`;
+    }
 
 
     selectedFile.classList.add("visible");
@@ -274,70 +289,170 @@ function removeSelectedFile() {
 async function uploadVideo() {
 
     if (!selectedVideo) {
-        showUploadError("Please select a video first.");
+
+        showUploadError(
+            "Please select a video first."
+        );
+
         return;
+
     }
+
 
     clearUploadError();
 
-    const button = document.getElementById("startSessionButton");
 
-    button.disabled = true;
+    const button =
+        document.getElementById(
+            "startSessionButton"
+        );
 
-    button.innerHTML = `
-        Processing...
-    `;
 
-    const formData = new FormData();
+    if (button) {
 
-    formData.append("video", selectedVideo);
+        button.disabled = true;
+
+        button.innerHTML = "Uploading...";
+
+    }
+
+
+    const formData =
+        new FormData();
+
+
+    formData.append(
+        "video",
+        selectedVideo
+    );
+
 
     try {
 
-        const response = await fetch("/upload", {
-            method: "POST",
-            body: formData
-        });
+        console.log("Uploading video...");
 
-        const data = await response.json();
 
-        if (!response.ok || !data.success) {
+        const response =
+            await fetch("/upload", {
+
+                method: "POST",
+
+                body: formData
+
+            });
+
+
+        console.log(
+            "Upload response:",
+            response.status
+        );
+
+
+        // Handle non-JSON responses safely
+
+        const contentType =
+            response.headers.get(
+                "content-type"
+            );
+
+
+        let data;
+
+
+        if (
+            contentType &&
+            contentType.includes("application/json")
+        ) {
+
+            data =
+                await response.json();
+
+        } else {
+
+            const text =
+                await response.text();
 
             throw new Error(
-                data.message || "Upload failed."
+                `Server returned an unexpected response (${response.status}).`
             );
+
         }
+
+
+        if (
+            !response.ok ||
+            !data.success
+        ) {
+
+            throw new Error(
+                data.message ||
+                data.error ||
+                "Upload failed."
+            );
+
+        }
+
+
+        console.log(
+            "Video ID:",
+            data.video_id
+        );
+
+
+        // Save processing information
 
         sessionStorage.setItem(
             "deepdive_video_id",
             data.video_id
         );
 
+
         sessionStorage.setItem(
             "deepdive_video_name",
-            data.filename
+            data.filename ||
+            selectedVideo.name
         );
 
+
+        sessionStorage.setItem(
+            "deepdive_video_source",
+            "upload"
+        );
+
+
         // Go to workspace
+
         window.location.href =
             "/workspace";
 
+
     } catch (error) {
 
-        console.error(error);
+        console.error(
+            "UPLOAD ERROR:",
+            error
+        );
+
 
         showUploadError(
             error.message ||
-            "Something went wrong while uploading the video."
+            "Unable to connect to processing server."
         );
 
-        button.disabled = false;
 
-        button.innerHTML = `
-            Start Learning →
-        `;
+        if (button) {
+
+            button.disabled = false;
+
+            button.innerHTML =
+                "Start Learning →";
+
+        }
+
     }
+
 }
+
 
 // ==================================================
 // ERROR DISPLAY
@@ -346,7 +461,9 @@ async function uploadVideo() {
 function showUploadError(message) {
 
     const errorBox =
-        document.getElementById("uploadError");
+        document.getElementById(
+            "uploadError"
+        );
 
 
     if (!errorBox) {
@@ -358,7 +475,9 @@ function showUploadError(message) {
         message;
 
 
-    errorBox.classList.add("visible");
+    errorBox.classList.add(
+        "visible"
+    );
 
 }
 
@@ -366,7 +485,9 @@ function showUploadError(message) {
 function clearUploadError() {
 
     const errorBox =
-        document.getElementById("uploadError");
+        document.getElementById(
+            "uploadError"
+        );
 
 
     if (!errorBox) {
@@ -376,7 +497,9 @@ function clearUploadError() {
 
     errorBox.textContent = "";
 
-    errorBox.classList.remove("visible");
+    errorBox.classList.remove(
+        "visible"
+    );
 
 }
 
@@ -387,7 +510,7 @@ function clearUploadError() {
 
 document.addEventListener(
     "DOMContentLoaded",
-    function() {
+    function () {
 
         const videoName =
             sessionStorage.getItem(
