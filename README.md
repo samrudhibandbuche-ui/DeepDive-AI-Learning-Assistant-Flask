@@ -51,6 +51,28 @@ Students can generate a downloadable PDF containing:
 * Flashcards
 * Lecture Transcript
 
+## Screenshots
+
+### Home Page
+
+![DeepDive AI Home Page](screenshots/home.png)
+
+### Lecture Upload
+
+![Lecture Upload](screenshots/upload.png)
+
+### Processing
+
+![Lecture Processing](screenshots/processing.png)
+
+### Learning Workspace
+
+![Learning Workspace](screenshots/workspace.png)
+
+### Learning Pack
+
+![Learning Pack](screenshots/learningpack.png)
+
 ## How DeepDive AI Works
 
 The application follows a simple processing pipeline:
