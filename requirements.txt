@@ -1,5 +1,5 @@
 Flask
-yt-dlp
+yt-dlp[default]
 reportlab
 google-genai
 python-dotenv
