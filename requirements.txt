@@ -1,5 +1,6 @@
 Flask
 yt-dlp[default]
+youtube-transcript-api
 reportlab
 google-genai
 python-dotenv

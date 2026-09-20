@@ -135,34 +135,10 @@
         }
 
         .youtube-loading {
-            display: none;
-            align-items: center;
-            justify-content: center;
-            gap: 10px;
-            margin: 16px auto 0;
-            padding: 12px 16px;
-            color: #5f574e;
-            background: #f7f1e2;
-            border: 1px solid #e3dac9;
-            border-radius: 12px;
+            margin-top: 12px;
+            color: #666;
             font-size: 13px;
-            line-height: 1.4;
-        }
-
-        .youtube-loading .loading-spinner {
-            width: 16px;
-            height: 16px;
-            flex: 0 0 16px;
-            border: 2px solid #d8cdbb;
-            border-top-color: #5f574e;
-            border-radius: 50%;
-            animation: deepDiveSpin 0.8s linear infinite;
-        }
-
-        @keyframes deepDiveSpin {
-            to {
-                transform: rotate(360deg);
-            }
+            display: none;
         }
 
     </style>
@@ -742,8 +718,7 @@
                     class="youtube-loading"
                     id="youtubeLoading"
                 >
-                    <span class="loading-spinner" aria-hidden="true"></span>
-                    <span>Preparing your learning pack...</span>
+                    Downloading lecture...
                 </div>
 
                 <div
