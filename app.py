@@ -19,6 +19,8 @@ import subprocess
 import threading
 import os
 import assemblyai as aai
+
+print("🔥🔥🔥 NEW DEEPDIVE AI_SERVICE.PY LOADED 🔥🔥🔥")
 from dotenv import load_dotenv
 
 
@@ -189,30 +191,73 @@ def transcript_snippet_text(snippet):
     return str(snippet)
 
 
+
 def fetch_youtube_transcript(youtube_video_id):
-    """Fetch an available English or Hindi YouTube transcript."""
+    """
+    Fetch an available English or Hindi YouTube transcript
+    without downloading the video.
+    """
 
-    api = YouTubeTranscriptApi()
+    try:
 
-    # Current youtube-transcript-api versions use fetch().
-    fetched = api.fetch(
-        youtube_video_id,
-        languages=["en", "hi"],
-    )
+        api = YouTubeTranscriptApi()
 
-    parts = [
-        transcript_snippet_text(snippet)
-        for snippet in fetched
-    ]
-
-    transcript = " ".join(parts).strip()
-
-    if not transcript:
-        raise RuntimeError(
-            "The video has no readable transcript or captions."
+        fetched = api.fetch(
+            youtube_video_id,
+            languages=["en", "hi"],
         )
 
-    return transcript
+        parts = [
+            transcript_snippet_text(snippet)
+            for snippet in fetched
+        ]
+
+        transcript = " ".join(parts).strip()
+
+        if not transcript:
+
+            raise RuntimeError(
+                "The video has no readable English or Hindi transcript."
+            )
+
+        return transcript
+
+    except Exception as error:
+
+        error_text = str(error).lower()
+
+        print("=" * 60)
+        print("YOUTUBE TRANSCRIPT FETCH FAILED")
+        print("Video ID:", youtube_video_id)
+        print("Error:", str(error))
+        print("=" * 60)
+
+        if (
+            "ip" in error_text
+            or "blocked" in error_text
+            or "sign in" in error_text
+            or "requestblocked" in error_text
+        ):
+
+            raise RuntimeError(
+                "YouTube blocked the transcript request from "
+                "the Render server. Please try a local video "
+                "upload or provide the lecture transcript."
+            ) from error
+
+        if (
+            "disabled" in error_text
+            or "no transcript" in error_text
+            or "not found" in error_text
+        ):
+
+            raise RuntimeError(
+                "This YouTube video does not have an accessible transcript."
+            ) from error
+
+        raise RuntimeError(
+            f"Could not retrieve the YouTube transcript: {error}"
+        ) from error
 
 
 # =========================================================
@@ -309,6 +354,106 @@ def process_youtube_transcript(video_id, youtube_id):
         job["status"] = "error"
         job["progress"] = 0
         job["message"] = "Could not extract the YouTube transcript."
+        job["error"] = str(error)
+
+        # =========================================================
+# MANUAL TRANSCRIPT PROCESSING
+# =========================================================
+
+@app.route("/transcript-text", methods=["POST"])
+def transcript_text():
+
+    data = request.get_json(silent=True) or {}
+
+    transcript = str(
+        data.get("transcript", "")
+    ).strip()
+
+    if not transcript:
+
+        return jsonify({
+            "success": False,
+            "error": "Please paste a transcript first."
+        }), 400
+
+    if len(transcript) < 30:
+
+        return jsonify({
+            "success": False,
+            "error": "The transcript is too short. Please paste more content."
+        }), 400
+
+    video_id = str(uuid.uuid4())
+
+    jobs[video_id] = {
+        "status": "processing",
+        "progress": 10,
+        "message": "Starting transcript processing...",
+        "filename": "Pasted Transcript",
+        "video_path": None,
+        "audio_path": None,
+        "transcript": transcript,
+        "notes": None,
+        "quiz": None,
+        "flashcards": None,
+        "error": None
+    }
+
+    thread = threading.Thread(
+        target=process_transcript_text,
+        args=(video_id,),
+        daemon=True
+    )
+
+    thread.start()
+
+    return jsonify({
+        "success": True,
+        "video_id": video_id,
+        "filename": "Pasted Transcript"
+    })
+
+
+def process_transcript_text(video_id):
+
+    job = jobs.get(video_id)
+
+    if not job:
+        return
+
+    try:
+
+        transcript = job["transcript"]
+
+        job["status"] = "processing"
+        job["progress"] = 30
+        job["message"] = "Generating smart notes with AI..."
+
+        job["notes"] = generate_smart_notes(transcript)
+
+        job["progress"] = 60
+        job["message"] = "Creating quiz from your transcript..."
+
+        job["quiz"] = generate_quiz(transcript)
+
+        job["progress"] = 85
+        job["message"] = "Creating flashcards from your transcript..."
+
+        job["flashcards"] = generate_flashcards(transcript)
+
+        job["progress"] = 100
+        job["status"] = "completed"
+        job["message"] = "Learning pack generated successfully."
+
+        print("MANUAL TRANSCRIPT PROCESSING COMPLETE")
+
+    except Exception as error:
+
+        print("MANUAL TRANSCRIPT ERROR:", error)
+
+        job["status"] = "error"
+        job["progress"] = 0
+        job["message"] = str(error)
         job["error"] = str(error)
 
 

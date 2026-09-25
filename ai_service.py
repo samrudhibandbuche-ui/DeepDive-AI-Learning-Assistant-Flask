@@ -2,6 +2,7 @@ import os
 import json
 import re
 import time
+import random
 
 from dotenv import load_dotenv
 from google import genai
@@ -22,10 +23,48 @@ if not API_KEY:
 
 client = genai.Client(api_key=API_KEY)
 
+# Keep the stable model you are already using.
 MODEL_NAME = "gemini-3.6-flash"
 
-# Number of automatic retries for temporary API errors
-MAX_RETRIES = 3
+# Extra protection for temporary Gemini 429/503/5xx errors.
+MAX_RETRIES = 4
+INITIAL_RETRY_DELAY = 2
+
+
+# ============================================================
+# GEMINI ERROR HELPERS
+# ============================================================
+
+class GeminiTemporaryUnavailable(RuntimeError):
+    """Raised when Gemini remains temporarily unavailable after retries."""
+
+
+def _is_retryable_error(error_text):
+    text = error_text.lower()
+
+    return (
+        "503" in text
+        or "unavailable" in text
+        or "service_unavailable" in text
+        or "429" in text
+        or "resource_exhausted" in text
+        or "rate limit" in text
+        or "temporarily" in text
+        or "500" in text
+        or "internal" in text
+        or "504" in text
+        or "deadline exceeded" in text
+    )
+
+
+def _is_daily_quota_error(error_text):
+    text = error_text.lower()
+
+    return (
+        "perday" in text
+        or "daily quota" in text
+        or "quota exceeded" in text and "retrydelay" not in text.lower()
+    )
 
 
 # ============================================================
@@ -36,13 +75,13 @@ def _generate_content(prompt, config=None):
     """
     Sends a request to Gemini.
 
-    Handles temporary 429/503 errors using exponential backoff.
+    Temporary 429/503/500/504 errors are retried with
+    exponential backoff and jitter.
 
-    Returns:
-        response.text
-
-    Raises:
-        Exception if the request permanently fails.
+    If Gemini is still temporarily unavailable after all
+    retries, a special error is raised so the caller can
+    switch to the local fallback instead of crashing the
+    entire DeepDive processing job.
     """
 
     last_error = None
@@ -73,7 +112,6 @@ def _generate_content(prompt, config=None):
         except Exception as error:
 
             last_error = error
-
             error_text = str(error)
 
             print()
@@ -83,62 +121,44 @@ def _generate_content(prompt, config=None):
             print(error_text)
             print("=" * 60)
 
-            # ------------------------------------------------
-            # Check whether this looks like a quota/rate error
-            # ------------------------------------------------
-
-            is_retryable = (
-                "503" in error_text
-                or "UNAVAILABLE" in error_text
-                or "429" in error_text
-                or "RESOURCE_EXHAUSTED" in error_text
-                or "rate limit" in error_text.lower()
-                or "temporarily" in error_text.lower()
-            )
-
-            if not is_retryable:
-                raise
-
-            # ------------------------------------------------
-            # If this is a daily quota exhaustion, retrying
-            # repeatedly is not useful.
-            # ------------------------------------------------
-
-            daily_quota = (
-                "PerDay" in error_text
-                or "perday" in error_text.lower()
-                or "daily quota" in error_text.lower()
-                or "quota exceeded" in error_text.lower()
-                and "retryDelay" not in error_text
-            )
-
-            if daily_quota:
-
-                print()
+            # Daily quota is not fixed by retrying.
+            if _is_daily_quota_error(error_text):
                 print("GEMINI DAILY QUOTA EXHAUSTED")
-                print("Using local fallback mode.")
-                print()
-
                 raise RuntimeError(
                     "GEMINI_DAILY_QUOTA_EXHAUSTED"
                 )
 
-            # ------------------------------------------------
-            # Exponential backoff
-            # ------------------------------------------------
+            # Only retry temporary/server-side failures.
+            if not _is_retryable_error(error_text):
+                raise
 
             if attempt < MAX_RETRIES - 1:
 
-                wait_time = 2 ** attempt
+                # 2s, 4s, 8s with a small random jitter.
+                wait_time = INITIAL_RETRY_DELAY * (2 ** attempt)
+                wait_time += random.uniform(0, 1)
 
                 print(
-                    f"Retrying Gemini request in "
-                    f"{wait_time} seconds..."
+                    f"Temporary Gemini error. "
+                    f"Retrying in {wait_time:.1f} seconds "
+                    f"(attempt {attempt + 2}/{MAX_RETRIES})..."
                 )
 
                 time.sleep(wait_time)
 
-    raise last_error
+    # Important:
+    # Do NOT let a final 503 escape as a fatal application error.
+    print()
+    print("=" * 60)
+    print("GEMINI STILL UNAVAILABLE AFTER RETRIES")
+    print("SWITCHING TO LOCAL FALLBACK MODE")
+    print("=" * 60)
+
+    raise GeminiTemporaryUnavailable(
+        str(last_error)
+        if last_error
+        else "Gemini is temporarily unavailable."
+    )
 
 
 # ============================================================
@@ -177,18 +197,20 @@ Create the study notes now.
 """
 
     try:
-
         notes = _generate_content(prompt)
-
         return notes.strip()
 
     except RuntimeError as error:
 
         if str(error) == "GEMINI_DAILY_QUOTA_EXHAUSTED":
-
             return generate_fallback_notes(transcript)
 
         raise
+
+    except GeminiTemporaryUnavailable as error:
+        print("Smart Notes: Gemini temporarily unavailable.")
+        print("Smart Notes: Using local fallback.")
+        return generate_fallback_notes(transcript)
 
 
 # ============================================================
@@ -250,7 +272,7 @@ LECTURE TRANSCRIPT:
 
         quiz_text = quiz_text.strip()
 
-        # Remove accidental markdown fences
+        # Remove accidental markdown fences.
         if quiz_text.startswith("```json"):
             quiz_text = quiz_text[7:]
 
@@ -262,7 +284,7 @@ LECTURE TRANSCRIPT:
 
         quiz_text = quiz_text.strip()
 
-        # Find JSON array if Gemini added extra text
+        # Find JSON array if Gemini added extra text.
         start = quiz_text.find("[")
         end = quiz_text.rfind("]")
 
@@ -272,10 +294,9 @@ LECTURE TRANSCRIPT:
             )
 
         quiz_text = quiz_text[start:end + 1]
-
         quiz = json.loads(quiz_text)
 
-        # Validate
+        # Validate.
         if not isinstance(quiz, list):
             raise ValueError(
                 "Quiz response is not a list."
@@ -323,12 +344,15 @@ LECTURE TRANSCRIPT:
     except RuntimeError as error:
 
         if str(error) == "GEMINI_DAILY_QUOTA_EXHAUSTED":
-
             print("Using fallback quiz.")
-
             return generate_fallback_quiz(transcript)
 
         raise
+
+    except GeminiTemporaryUnavailable:
+        print("Quiz: Gemini temporarily unavailable.")
+        print("Quiz: Using local fallback.")
+        return generate_fallback_quiz(transcript)
 
 
 # ============================================================
@@ -404,7 +428,6 @@ LECTURE TRANSCRIPT:
             )
 
         flashcards_text = flashcards_text[start:end + 1]
-
         flashcards = json.loads(flashcards_text)
 
         if not isinstance(flashcards, list):
@@ -429,12 +452,12 @@ LECTURE TRANSCRIPT:
                     "Flashcard is missing answer."
                 )
 
-            if not card["question"].strip():
+            if not str(card["question"]).strip():
                 raise ValueError(
                     "Flashcard question is empty."
                 )
 
-            if not card["answer"].strip():
+            if not str(card["answer"]).strip():
                 raise ValueError(
                     "Flashcard answer is empty."
                 )
@@ -449,15 +472,15 @@ LECTURE TRANSCRIPT:
     except RuntimeError as error:
 
         if str(error) == "GEMINI_DAILY_QUOTA_EXHAUSTED":
-
             print("Using fallback flashcards.")
-
-            return generate_fallback_flashcards(
-                transcript
-            )
+            return generate_fallback_flashcards(transcript)
 
         raise
 
+    except GeminiTemporaryUnavailable:
+        print("Flashcards: Gemini temporarily unavailable.")
+        print("Flashcards: Using local fallback.")
+        return generate_fallback_flashcards(transcript)
 
 
 # ============================================================
@@ -465,9 +488,7 @@ LECTURE TRANSCRIPT:
 # ============================================================
 
 def _clean_text(text):
-
     text = re.sub(r"\s+", " ", text)
-
     return text.strip()
 
 
@@ -501,6 +522,7 @@ def generate_fallback_notes(transcript):
     if not sentences:
         return (
             "### Lecture Notes\n\n"
+            "Gemini is temporarily unavailable. "
             "The lecture transcript is available, but "
             "there is not enough structured text to create "
             "detailed notes."
@@ -511,12 +533,9 @@ def generate_fallback_notes(transcript):
     notes = [
         "### Lecture Notes",
         "",
-        "⚠️ **Offline fallback mode**",
-        "",
-        "Gemini is temporarily unavailable because the "
-        "API quota has been exhausted. The following "
-        "notes are extracted directly from the lecture "
-        "transcript.",
+        "Fallback mode: Gemini was temporarily unavailable.",
+        "The following key points were extracted directly "
+        "from the lecture transcript.",
         "",
         "### Key Lecture Points",
         ""
@@ -535,31 +554,22 @@ def generate_fallback_notes(transcript):
 def generate_fallback_quiz(transcript):
 
     sentences = _split_sentences(transcript)
-
     quiz = []
 
-    # We need 10 questions for the existing frontend.
     for index in range(10):
 
         if sentences:
-
-            sentence = sentences[
-                index % len(sentences)
-            ]
-
-            # Keep sentence as correct answer.
+            sentence = sentences[index % len(sentences)]
             correct_answer = sentence
-
         else:
-
             correct_answer = (
                 "Information from the lecture transcript."
             )
 
         quiz.append({
             "question": (
-                f"Which statement is taken from the "
-                f"lecture content? (Question {index + 1})"
+                "Which statement is directly supported "
+                f"by the lecture? (Question {index + 1})"
             ),
             "options": [
                 correct_answer,
@@ -569,7 +579,7 @@ def generate_fallback_quiz(transcript):
             ],
             "correct_answer": correct_answer,
             "explanation": (
-                "This option was extracted directly from "
+                "The correct option is taken directly from "
                 "the lecture transcript."
             )
         })
@@ -584,19 +594,13 @@ def generate_fallback_quiz(transcript):
 def generate_fallback_flashcards(transcript):
 
     sentences = _split_sentences(transcript)
-
     flashcards = []
 
     for index in range(10):
 
         if sentences:
-
-            sentence = sentences[
-                index % len(sentences)
-            ]
-
+            sentence = sentences[index % len(sentences)]
         else:
-
             sentence = (
                 "The lecture transcript does not contain "
                 "enough text for this flashcard."
@@ -611,5 +615,3 @@ def generate_fallback_flashcards(transcript):
         })
 
     return flashcards
-
-
