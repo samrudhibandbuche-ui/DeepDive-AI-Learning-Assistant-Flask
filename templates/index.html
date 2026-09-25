@@ -233,6 +233,18 @@
                         <span>→</span>
                     </button>
 
+
+                    <!-- ================= DEMO ================= -->
+
+                    <button
+                        type="button"
+                        class="secondary-button"
+                        onclick="openDemo()"
+                    >
+                        Demo
+                    </button>
+
+
                     <a
                         href="#how-it-works"
                         class="secondary-button"
@@ -601,6 +613,75 @@
 
         </footer>
 
+
+        <!-- =====================================================
+             MANUAL TRANSCRIPT INPUT
+        ===================================================== -->
+
+        <section
+            class="tool-section"
+            id="manualTranscriptSection"
+        >
+
+            <div class="tool-card">
+
+                <div class="tool-card-header">
+
+                    <div>
+
+                        <span class="tool-label">
+                            ALTERNATIVE METHOD
+                        </span>
+
+                        <h3>
+                            Paste Lecture Transcript
+                        </h3>
+
+                        <p>
+                            If YouTube processing is unavailable, paste your
+                            lecture transcript here to generate your learning pack.
+                        </p>
+
+                    </div>
+
+                </div>
+
+
+                <textarea
+                    id="manualTranscriptInput"
+                    class="transcript-textarea"
+                    placeholder="Paste your lecture transcript here..."
+                    rows="10"
+                ></textarea>
+
+
+                <button
+                    type="button"
+                    id="manualTranscriptButton"
+                    class="primary-button"
+                    onclick="processManualTranscript()"
+                >
+                    Generate Learning Pack
+                </button>
+
+
+                <div
+                    id="manualTranscriptLoading"
+                    style="display: none;"
+                >
+                    Processing transcript... Please wait.
+                </div>
+
+
+                <div
+                    id="manualTranscriptError"
+                    style="display: none; color: red;"
+                ></div>
+
+            </div>
+
+        </section>
+
     </main>
 
 
@@ -742,8 +823,16 @@
                     class="youtube-loading"
                     id="youtubeLoading"
                 >
-                    <span class="loading-spinner" aria-hidden="true"></span>
-                    <span>Preparing your learning pack...</span>
+
+                    <span
+                        class="loading-spinner"
+                        aria-hidden="true"
+                    ></span>
+
+                    <span>
+                        Preparing your learning pack...
+                    </span>
+
                 </div>
 
                 <div
@@ -976,9 +1065,11 @@
                     "deepdive_video_name",
                     data.filename || "YouTube Lecture"
                 );
+
+
                 sessionStorage.setItem(
-                "deepdive_video_source",
-                "youtube"
+                    "deepdive_video_source",
+                    "youtube"
                 );
 
 
@@ -1022,17 +1113,266 @@
 
         document
             .getElementById("youtubeInput")
-            .addEventListener("keydown", function(event) {
+            .addEventListener(
+                "keydown",
+                function(event) {
 
-                if (event.key === "Enter") {
+                    if (event.key === "Enter") {
 
-                    event.preventDefault();
+                        event.preventDefault();
 
-                    processYoutubeVideo();
+                        processYoutubeVideo();
+
+                    }
+
+                }
+            );
+
+
+        // =====================================================
+        // MANUAL TRANSCRIPT PROCESSING
+        // =====================================================
+
+        async function processManualTranscript() {
+
+            const transcriptInput =
+                document.getElementById(
+                    "manualTranscriptInput"
+                );
+
+            const transcript =
+                transcriptInput.value.trim();
+
+            const button =
+                document.getElementById(
+                    "manualTranscriptButton"
+                );
+
+            const loading =
+                document.getElementById(
+                    "manualTranscriptLoading"
+                );
+
+            const errorBox =
+                document.getElementById(
+                    "manualTranscriptError"
+                );
+
+
+            // Clear previous error
+
+            errorBox.style.display = "none";
+            errorBox.textContent = "";
+
+
+            // Validate transcript
+
+            if (!transcript) {
+
+                errorBox.textContent =
+                    "Please paste a transcript first.";
+
+                errorBox.style.display =
+                    "block";
+
+                return;
+            }
+
+
+            if (transcript.length < 30) {
+
+                errorBox.textContent =
+                    "The transcript is too short. Please paste more content.";
+
+                errorBox.style.display =
+                    "block";
+
+                return;
+            }
+
+
+            // Disable button while processing
+
+            button.disabled = true;
+
+            button.textContent =
+                "Starting Processing...";
+
+            loading.style.display =
+                "block";
+
+
+            try {
+
+                const response =
+                    await fetch(
+                        "/transcript-text",
+                        {
+
+                            method: "POST",
+
+                            headers: {
+                                "Content-Type":
+                                    "application/json"
+                            },
+
+                            body: JSON.stringify({
+                                transcript: transcript
+                            })
+
+                        }
+                    );
+
+
+                const data =
+                    await response.json();
+
+
+                if (
+                    !response.ok ||
+                    !data.success
+                ) {
+
+                    throw new Error(
+                        data.error ||
+                        data.message ||
+                        "Unable to process transcript."
+                    );
 
                 }
 
-            });
+
+                // Store information for the workspace
+
+                sessionStorage.setItem(
+                    "deepdive_video_id",
+                    data.video_id
+                );
+
+
+                sessionStorage.setItem(
+                    "deepdive_video_name",
+                    data.filename ||
+                    "Pasted Transcript"
+                );
+
+
+                sessionStorage.setItem(
+                    "deepdive_video_source",
+                    "manual_transcript"
+                );
+
+
+                // Open workspace
+
+                window.location.href =
+                    "/workspace";
+
+            }
+
+            catch (error) {
+
+                console.error(
+                    "Manual transcript error:",
+                    error
+                );
+
+
+                errorBox.textContent =
+                    error.message ||
+                    "Something went wrong. Please try again.";
+
+                errorBox.style.display =
+                    "block";
+
+
+                button.disabled =
+                    false;
+
+                button.textContent =
+                    "Generate Learning Pack";
+
+                loading.style.display =
+                    "none";
+
+            }
+
+        }
+
+
+        // =====================================================
+        // DEMO MODE
+        // =====================================================
+
+        async function openDemo() {
+
+            try {
+
+                const response =
+                    await fetch("/demo");
+
+
+                const data =
+                    await response.json();
+
+
+                if (
+                    !response.ok ||
+                    !data.success
+                ) {
+
+                    throw new Error(
+                        data.message ||
+                        "Demo could not start."
+                    );
+
+                }
+
+
+                // Store demo session information
+
+                sessionStorage.setItem(
+                    "deepdive_video_id",
+                    data.video_id
+                );
+
+
+                sessionStorage.setItem(
+                    "deepdive_video_name",
+                    data.filename ||
+                    "Demo Lecture"
+                );
+
+
+                sessionStorage.setItem(
+                    "deepdive_video_source",
+                    "demo"
+                );
+
+
+                // Open the normal workspace
+
+                window.location.href =
+                    "/workspace";
+
+            }
+
+            catch (error) {
+
+                console.error(
+                    "Demo error:",
+                    error
+                );
+
+
+                alert(
+                    "Demo could not start: " +
+                    error.message
+                );
+
+            }
+
+        }
 
     </script>
 
