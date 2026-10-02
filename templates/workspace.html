@@ -1338,15 +1338,25 @@
 
     if (videoSource === "youtube") {
 
-        lectureSource.textContent =
-            "YOUTUBE LECTURE";
+    lectureSource.textContent =
+        "YOUTUBE LECTURE";
 
-    } else {
+} else if (videoSource === "demo") {
 
-        lectureSource.textContent =
-            "LOCAL VIDEO";
+    lectureSource.textContent =
+        "DEMO LECTURE";
 
-    }
+} else if (videoSource === "manual_transcript") {
+
+    lectureSource.textContent =
+        "MANUAL TRANSCRIPT";
+
+} else {
+
+    lectureSource.textContent =
+        "LOCAL VIDEO";
+
+}
 
 
     // =================================================

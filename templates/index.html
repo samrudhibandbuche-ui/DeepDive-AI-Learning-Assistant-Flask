@@ -29,7 +29,7 @@
 
         .input-method {
             flex: 1;
-            padding: 12px 16px;
+            padding: 12px 10px;
             border: 1px solid #ddd;
             border-radius: 10px;
             background: #fafafa;
@@ -163,6 +163,134 @@
             to {
                 transform: rotate(360deg);
             }
+        }
+
+
+        /* ================= TRANSCRIPT INPUT ================= */
+
+        .transcript-box {
+            display: none;
+            padding: 24px;
+            border: 1px dashed #cfcfcf;
+            border-radius: 14px;
+            background: #fafafa;
+        }
+
+        .transcript-box.active {
+            display: block;
+        }
+
+        .transcript-icon {
+            width: 46px;
+            height: 46px;
+            margin: 0 auto 14px;
+            border-radius: 12px;
+            background: #111;
+            color: white;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 20px;
+        }
+
+        .transcript-box h3 {
+            margin: 0 0 7px;
+            text-align: center;
+        }
+
+        .transcript-box p {
+            margin: 0 0 18px;
+            color: #777;
+            font-size: 14px;
+            text-align: center;
+        }
+
+        .modal-transcript-input {
+            width: 100%;
+            min-height: 150px;
+            box-sizing: border-box;
+            padding: 13px 14px;
+            border: 1px solid #d5d5d5;
+            border-radius: 9px;
+            outline: none;
+            font-size: 14px;
+            line-height: 1.5;
+            font-family: inherit;
+            background: white;
+            resize: vertical;
+        }
+
+        .modal-transcript-input:focus {
+            border-color: #777;
+        }
+
+        .transcript-submit {
+            width: 100%;
+            margin-top: 12px;
+            padding: 13px 18px;
+            border: none;
+            border-radius: 9px;
+            background: #111;
+            color: white;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: 0.2s ease;
+        }
+
+        .transcript-submit:hover {
+            background: #292929;
+        }
+
+        .transcript-submit:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+        }
+
+        .transcript-error {
+            margin-top: 12px;
+            color: #b42318;
+            font-size: 13px;
+            display: none;
+            text-align: center;
+        }
+
+        .transcript-loading {
+            display: none;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+            margin: 16px auto 0;
+            padding: 12px 16px;
+            color: #5f574e;
+            background: #f7f1e2;
+            border: 1px solid #e3dac9;
+            border-radius: 12px;
+            font-size: 13px;
+            line-height: 1.4;
+        }
+
+        .transcript-loading .loading-spinner {
+            width: 16px;
+            height: 16px;
+            flex: 0 0 16px;
+            border: 2px solid #d8cdbb;
+            border-top-color: #5f574e;
+            border-radius: 50%;
+            animation: deepDiveSpin 0.8s linear infinite;
+        }
+
+        @media (max-width: 600px) {
+
+            .input-methods {
+                gap: 6px;
+            }
+
+            .input-method {
+                padding: 11px 6px;
+                font-size: 12px;
+            }
+
         }
 
     </style>
@@ -616,6 +744,7 @@
 
         <!-- =====================================================
              MANUAL TRANSCRIPT INPUT
+             Existing section kept unchanged
         ===================================================== -->
 
         <section
@@ -712,8 +841,7 @@
             </h2>
 
             <p>
-                Upload a lecture video or use a YouTube link
-                to build your learning workspace.
+                Choose how you want to start learning.
             </p>
 
 
@@ -737,6 +865,15 @@
                     onclick="showYoutubeMethod()"
                 >
                     YouTube Link
+                </button>
+
+                <button
+                    type="button"
+                    class="input-method"
+                    id="transcriptMethodButton"
+                    onclick="showTranscriptMethod()"
+                >
+                    Transcript
                 </button>
 
             </div>
@@ -843,6 +980,65 @@
             </div>
 
 
+            <!-- ================= TRANSCRIPT ================= -->
+
+            <div
+                class="transcript-box"
+                id="transcriptBox"
+            >
+
+                <div class="transcript-icon">
+                    ≡
+                </div>
+
+                <h3>
+                    Use a lecture transcript
+                </h3>
+
+                <p>
+                    Paste your transcript and DeepDive will turn it into a learning pack.
+                </p>
+
+                <textarea
+                    id="modalTranscriptInput"
+                    class="modal-transcript-input"
+                    placeholder="Paste your lecture transcript here..."
+                ></textarea>
+
+                <button
+                    type="button"
+                    class="transcript-submit"
+                    id="transcriptSubmitButton"
+                    onclick="processModalTranscript()"
+                >
+                    Generate Learning Pack
+                    <span>→</span>
+                </button>
+
+                <div
+                    class="transcript-loading"
+                    id="transcriptLoading"
+                >
+
+                    <span
+                        class="loading-spinner"
+                        aria-hidden="true"
+                    ></span>
+
+                    <span>
+                        Preparing your learning pack...
+                    </span>
+
+                </div>
+
+                <div
+                    class="transcript-error"
+                    id="transcriptError"
+                ></div>
+
+            </div>
+
+
             <!-- ================= SELECTED FILE ================= -->
 
             <div
@@ -904,17 +1100,27 @@
     ></script>
 
 
-    <!-- ================= YOUTUBE JS ================= -->
+    <!-- ================= YOUTUBE + TRANSCRIPT JS ================= -->
 
     <script>
+
+        // =====================================================
+        // SHOW UPLOAD METHOD
+        // =====================================================
 
         function showUploadMethod() {
 
             const uploadBox =
                 document.getElementById("uploadBox");
 
+            const selectedFile =
+                document.getElementById("selectedFile");
+
             const youtubeBox =
                 document.getElementById("youtubeBox");
+
+            const transcriptBox =
+                document.getElementById("transcriptBox");
 
             const uploadButton =
                 document.getElementById("uploadMethodButton");
@@ -922,14 +1128,41 @@
             const youtubeButton =
                 document.getElementById("youtubeMethodButton");
 
+            const transcriptButton =
+                document.getElementById("transcriptMethodButton");
+
+
             uploadBox.style.display = "block";
+
             youtubeBox.classList.remove("active");
 
+            transcriptBox.classList.remove("active");
+
+
+            /*
+             * If a file has already been selected,
+             * let app.js control its selected-file display.
+             */
+
+            if (
+                document.getElementById("videoInput").files.length > 0
+            ) {
+                selectedFile.style.display = "flex";
+            }
+
+
             uploadButton.classList.add("active");
+
             youtubeButton.classList.remove("active");
+
+            transcriptButton.classList.remove("active");
 
         }
 
+
+        // =====================================================
+        // SHOW YOUTUBE METHOD
+        // =====================================================
 
         function showYoutubeMethod() {
 
@@ -942,25 +1175,96 @@
             const youtubeBox =
                 document.getElementById("youtubeBox");
 
+            const transcriptBox =
+                document.getElementById("transcriptBox");
+
             const uploadButton =
                 document.getElementById("uploadMethodButton");
 
             const youtubeButton =
                 document.getElementById("youtubeMethodButton");
 
+            const transcriptButton =
+                document.getElementById("transcriptMethodButton");
+
+
             uploadBox.style.display = "none";
 
             selectedFile.style.display = "none";
 
+            transcriptBox.classList.remove("active");
+
             youtubeBox.classList.add("active");
 
+
             uploadButton.classList.remove("active");
+
             youtubeButton.classList.add("active");
 
-            document.getElementById("youtubeInput").focus();
+            transcriptButton.classList.remove("active");
+
+
+            document
+                .getElementById("youtubeInput")
+                .focus();
 
         }
 
+
+        // =====================================================
+        // SHOW TRANSCRIPT METHOD
+        // =====================================================
+
+        function showTranscriptMethod() {
+
+            const uploadBox =
+                document.getElementById("uploadBox");
+
+            const selectedFile =
+                document.getElementById("selectedFile");
+
+            const youtubeBox =
+                document.getElementById("youtubeBox");
+
+            const transcriptBox =
+                document.getElementById("transcriptBox");
+
+            const uploadButton =
+                document.getElementById("uploadMethodButton");
+
+            const youtubeButton =
+                document.getElementById("youtubeMethodButton");
+
+            const transcriptButton =
+                document.getElementById("transcriptMethodButton");
+
+
+            uploadBox.style.display = "none";
+
+            selectedFile.style.display = "none";
+
+            youtubeBox.classList.remove("active");
+
+            transcriptBox.classList.add("active");
+
+
+            uploadButton.classList.remove("active");
+
+            youtubeButton.classList.remove("active");
+
+            transcriptButton.classList.add("active");
+
+
+            document
+                .getElementById("modalTranscriptInput")
+                .focus();
+
+        }
+
+
+        // =====================================================
+        // YOUTUBE PROCESSING
+        // =====================================================
 
         async function processYoutubeVideo() {
 
@@ -978,8 +1282,11 @@
 
             const url = input.value.trim();
 
+
             errorBox.style.display = "none";
+
             errorBox.textContent = "";
+
 
             if (!url) {
 
@@ -999,6 +1306,7 @@
             const youtubePattern =
                 /^(https?:\/\/)?(www\.)?(youtube\.com|youtu\.be)\//i;
 
+
             if (!youtubePattern.test(url)) {
 
                 errorBox.textContent =
@@ -1015,7 +1323,7 @@
             button.textContent =
                 "Processing...";
 
-            loading.style.display = "block";
+            loading.style.display = "flex";
 
 
             try {
@@ -1050,11 +1358,6 @@
                 }
 
 
-                /*
-                 * Save the same information used by
-                 * workspace.html for uploaded videos.
-                 */
-
                 sessionStorage.setItem(
                     "deepdive_video_id",
                     data.video_id
@@ -1073,10 +1376,6 @@
                 );
 
 
-                /*
-                 * Open the normal learning workspace.
-                 */
-
                 window.location.href =
                     "/workspace";
 
@@ -1089,11 +1388,13 @@
                     error
                 );
 
+
                 errorBox.textContent =
                     error.message ||
                     "Something went wrong while processing the YouTube video.";
 
                 errorBox.style.display = "block";
+
 
                 button.disabled = false;
 
@@ -1107,9 +1408,9 @@
         }
 
 
-        /*
-         * Allow pressing Enter inside the YouTube URL box.
-         */
+        // =====================================================
+        // YOUTUBE ENTER KEY
+        // =====================================================
 
         document
             .getElementById("youtubeInput")
@@ -1130,14 +1431,14 @@
 
 
         // =====================================================
-        // MANUAL TRANSCRIPT PROCESSING
+        // MODAL TRANSCRIPT PROCESSING
         // =====================================================
 
-        async function processManualTranscript() {
+        async function processModalTranscript() {
 
             const transcriptInput =
                 document.getElementById(
-                    "manualTranscriptInput"
+                    "modalTranscriptInput"
                 );
 
             const transcript =
@@ -1145,23 +1446,22 @@
 
             const button =
                 document.getElementById(
-                    "manualTranscriptButton"
+                    "transcriptSubmitButton"
                 );
 
             const loading =
                 document.getElementById(
-                    "manualTranscriptLoading"
+                    "transcriptLoading"
                 );
 
             const errorBox =
                 document.getElementById(
-                    "manualTranscriptError"
+                    "transcriptError"
                 );
 
 
-            // Clear previous error
-
             errorBox.style.display = "none";
+
             errorBox.textContent = "";
 
 
@@ -1191,7 +1491,171 @@
             }
 
 
-            // Disable button while processing
+            button.disabled = true;
+
+            button.textContent =
+                "Processing...";
+
+            loading.style.display =
+                "flex";
+
+
+            try {
+
+                const response =
+                    await fetch(
+                        "/transcript-text",
+                        {
+
+                            method: "POST",
+
+                            headers: {
+                                "Content-Type":
+                                    "application/json"
+                            },
+
+                            body: JSON.stringify({
+                                transcript: transcript
+                            })
+
+                        }
+                    );
+
+
+                const data =
+                    await response.json();
+
+
+                if (
+                    !response.ok ||
+                    !data.success
+                ) {
+
+                    throw new Error(
+                        data.error ||
+                        data.message ||
+                        "Unable to process transcript."
+                    );
+
+                }
+
+
+                /*
+                 * Store information for the
+                 * normal workspace.
+                 */
+
+                sessionStorage.setItem(
+                    "deepdive_video_id",
+                    data.video_id
+                );
+
+
+                sessionStorage.setItem(
+                    "deepdive_video_name",
+                    data.filename ||
+                    "Pasted Transcript"
+                );
+
+
+                sessionStorage.setItem(
+                    "deepdive_video_source",
+                    "manual_transcript"
+                );
+
+
+                window.location.href =
+                    "/workspace";
+
+            }
+
+            catch (error) {
+
+                console.error(
+                    "Modal transcript error:",
+                    error
+                );
+
+
+                errorBox.textContent =
+                    error.message ||
+                    "Something went wrong. Please try again.";
+
+                errorBox.style.display =
+                    "block";
+
+
+                button.disabled =
+                    false;
+
+                button.textContent =
+                    "Generate Learning Pack →";
+
+                loading.style.display =
+                    "none";
+
+            }
+
+        }
+
+
+        // =====================================================
+        // EXISTING MANUAL TRANSCRIPT PROCESSING
+        // =====================================================
+
+        async function processManualTranscript() {
+
+            const transcriptInput =
+                document.getElementById(
+                    "manualTranscriptInput"
+                );
+
+            const transcript =
+                transcriptInput.value.trim();
+
+            const button =
+                document.getElementById(
+                    "manualTranscriptButton"
+                );
+
+            const loading =
+                document.getElementById(
+                    "manualTranscriptLoading"
+                );
+
+            const errorBox =
+                document.getElementById(
+                    "manualTranscriptError"
+                );
+
+
+            errorBox.style.display = "none";
+            errorBox.textContent = "";
+
+
+            if (!transcript) {
+
+                errorBox.textContent =
+                    "Please paste a transcript first.";
+
+                errorBox.style.display =
+                    "block";
+
+                return;
+            }
+
+
+            if (transcript.length < 30) {
+
+                errorBox.textContent =
+                    "The transcript is too short. Please paste more content.";
+
+                errorBox.style.display =
+                    "block";
+
+                return;
+            }
+
 
             button.disabled = true;
 
@@ -1242,8 +1706,6 @@
                 }
 
 
-                // Store information for the workspace
-
                 sessionStorage.setItem(
                     "deepdive_video_id",
                     data.video_id
@@ -1262,8 +1724,6 @@
                     "manual_transcript"
                 );
 
-
-                // Open workspace
 
                 window.location.href =
                     "/workspace";
@@ -1329,8 +1789,6 @@
                 }
 
 
-                // Store demo session information
-
                 sessionStorage.setItem(
                     "deepdive_video_id",
                     data.video_id
@@ -1349,8 +1807,6 @@
                     "demo"
                 );
 
-
-                // Open the normal workspace
 
                 window.location.href =
                     "/workspace";
